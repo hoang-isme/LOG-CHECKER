@@ -1,0 +1,56 @@
+name: Build Xiaomi Health APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Tải file zip từ repo về máy chủ
+        uses: actions/checkout@v4
+
+      - name: Cài đặt Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Cài đặt Flutter SDK
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+
+      - name: Cài đặt Rust & Android arm64 target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Cài đặt cargo-ndk
+        run: cargo install cargo-ndk
+
+      - name: Giải nén file zip & Đóng gói APK cho Xiaomi
+        run: |
+          unzip -o xiaomi_health_flutter_rust.zip -d extracted_app
+          cd extracted_app/xiaomi_health_flutter_rust
+          
+          # Tạo đầy đủ khung tài nguyên Android chuẩn của Flutter
+          flutter create --platforms=android --org com.xiaomi --project-name xiaomi_health_inspector .
+          
+          # Biên dịch nhân Rust sang thư viện .so (arm64-v8a cho chip Snapdragon)
+          cd rust
+          cargo ndk -t arm64-v8a -o ../android/app/src/main/jniLibs build --release
+          cd ..
+          
+          # Xuất file APK Release
+          flutter pub get
+          flutter build apk --release --target-platform android-arm64
+
+      - name: Xuất file APK để tải về điện thoại
+        uses: actions/upload-artifact@v4
+        with:
+          name: Xiaomi-Health-Inspector-APK
+          path: extracted_app/xiaomi_health_flutter_rust/build/app/outputs/flutter-apk/app-release.apk
